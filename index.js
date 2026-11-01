@@ -2,6 +2,8 @@ import express from "express";
 import bodyParser from "body-parser";
 import pg from "pg";
 import dotenv from "dotenv";
+import session from "express-session";
+import pgSession from "connect-pg-simple";
 
 dotenv.config();
 
@@ -17,6 +19,21 @@ const db = new pg.Client({
 
 const app = express();
 const port = 3000;
+
+const PgSessionStore = pgSession(session);
+
+const sessionPool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false,
+  },
+});
+
+const sessionStore = new PgSessionStore({
+  pool: sessionPool,
+  tableName: "user_sessions",
+  createTableIfMissing: true,
+});
 
 let quiz = [];
 
@@ -47,71 +64,101 @@ async function connectDatabase() {
 connectDatabase();
 
 app.set("view engine", "ejs");
+app.set("trust proxy", 1);
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static("public"));
+app.use(
+  session({
+    store: sessionStore,
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 24 * 60 * 60 * 1000,
+    },
+  })
+);
 
-let currentQuestion = {};
-let totalCorrect = 0;
-let totalWrong = 0;
+
+// let currentQuestion = {};
+// let totalCorrect = 0;
+// let totalWrong = 0;
+
 
 app.get("/", (req, res) => {
-  currentQuestion = nextQuestion();
+  if (req.session.totalCorrect === undefined) {
+    req.session.totalCorrect = 0;
+    req.session.totalWrong = 0;
+    req.session.previousQuestionId = null;
+  }
 
-  res.render("index", { 
-    question: currentQuestion,
-    totalScore: totalCorrect,
-    totalWrong: totalWrong 
+  req.session.currentQuestion = nextQuestion(req.session);
+
+  res.render("index", {
+    question: req.session.currentQuestion,
+    totalScore: req.session.totalCorrect,
+    totalWrong: req.session.totalWrong
   });
 });
 
 app.post("/submit", (req, res) => {
-  let answer = req.body.answer.trim();
+  const answer = (req.body.answer || "").trim();
   let isCorrect = false;
 
-  if (currentQuestion.capital.toLowerCase() === answer.toLowerCase()) {
+  if (
+    req.session.currentQuestion.capital.toLowerCase() ===
+    answer.toLowerCase()
+  ) {
     isCorrect = true;
-    totalCorrect++;
+    req.session.totalCorrect++;
   } else {
-    totalWrong++;
+    req.session.totalWrong++;
   }
 
-  if (totalWrong >= 2) {
+  if (req.session.totalWrong >= 2) {
     return res.render("index", {
       gameOver: true,
-      totalScore: totalCorrect,
-      totalWrong: totalWrong
+      totalScore: req.session.totalCorrect,
+      totalWrong: req.session.totalWrong
     });
   }
 
-  currentQuestion = nextQuestion();
-  res.render("index", { 
-    question: currentQuestion, 
-    wasCorrect: isCorrect, 
-    totalScore: totalCorrect,
-    totalWrong: totalWrong 
+  req.session.currentQuestion = nextQuestion(req.session);
+
+  res.render("index", {
+    question: req.session.currentQuestion,
+    wasCorrect: isCorrect,
+    totalScore: req.session.totalCorrect,
+    totalWrong: req.session.totalWrong
   });
-  
 });
 
 app.get("/restart", (req, res) => {
-    totalCorrect = 0;
-    totalWrong = 0;
-    previousQuestion = null;
+  req.session.totalCorrect = 0;
+  req.session.totalWrong = 0;
+  req.session.previousQuestionId = null;
 
-    res.redirect("/");
+  res.redirect("/");
 });
 
-let previousQuestion = null;
-function nextQuestion() {
-    let randomState;
+function nextQuestion(sessionData) {
+  let availableQuestions = quiz.filter(
+    (state) => state.id !== sessionData.previousQuestionId
+  );
 
-    do {
-        randomState = quiz[Math.floor(Math.random() * quiz.length)];
-    } while (quiz.length > 1 && randomState === previousQuestion);
+  if (availableQuestions.length === 0) {
+    availableQuestions = quiz;
+  }
 
-    previousQuestion = randomState;
+  const randomState =
+    availableQuestions[Math.floor(Math.random() * availableQuestions.length)];
 
-    return randomState;
+  sessionData.previousQuestionId = randomState.id;
+
+  return randomState;
 }
 
 
