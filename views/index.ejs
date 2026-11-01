@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nigeria State and Capital Quiz</title>
+    <link rel="stylesheet" href="/styles/main.css" />
+  </head>
+  <body>
+    <main class="quiz-container">
+      <h1>Nigeria State and Capital Quiz</h1>
+      <h3>Total Score: 
+        <span id="score">
+          <%= locals.totalScore ? totalScore : "0" %>
+        </span>
+      </h3>
+      <h3>
+        Incorrect Answers: 
+        <span>
+          <%= locals.totalWrong ?? 0 %>/2
+        </span>
+      </h3>
+
+
+      <% if (locals.wasCorrect === true) { %>
+        <p>Correct! Well done.</p>
+      <% } else if (locals.wasCorrect === false) { %>
+        <p>Incorrect! Try the next one.</p>
+      <% } %>
+
+      <% if (locals.gameOver) { %>
+        <h2>Game Over!</h2>
+        <p>Your final score is <%= totalScore %></p>
+        <a href="/restart">Restart Quiz</a>
+        <% } else { %>
+      <h2>What is the capital of <%= question.state %>?</h2>
+
+      <form action="/submit" method="POST">
+        <input 
+        type="text" 
+        name="answer" 
+        placeholder="Enter the capital" 
+        autocomplete="off" 
+        required />
+    
+        <button type="submit">Submit</button>
+      </form>
+      <% } %>
+    </main> 
+  </body>
+</html>
