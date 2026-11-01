@@ -1,29 +1,50 @@
 import express from "express";
 import bodyParser from "body-parser";
 import pg from "pg";
+import dotenv from "dotenv";
+
+dotenv.config();
+
 
 const db = new pg.Client({
-  user: "postgres",
-  host: "localhost",
-  database: "mywork",
-  password: "123456",
-  port: 5432,
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false,
+  },
 });
+
+
 
 const app = express();
 const port = 3000;
 
-db.connect();
-
 let quiz = [];
-db.query("SELECT * FROM nigeria_state", (err, res) => {
-  if (err) {
-    console.error("Error executing query", err.stack);
-  } else {
-    quiz = res.rows;
-    console.log(quiz);
+
+async function connectDatabase() {
+  try {
+    await db.connect();
+
+    console.log("Connected to Supabase PostgreSQL!");
+
+    const result = await db.query(
+      "SELECT * FROM public.nigeria_state"
+    );
+
+    quiz = result.rows;
+
+    console.log(`Loaded ${quiz.length} states`);
+
+    app.listen(port, () => {
+      console.log(`Server is running on port ${port}`);
+    });
+
+  } catch (err) {
+    console.error("Database error:", err.message);
+    process.exit(1);
   }
-});
+}
+
+connectDatabase();
 
 app.set("view engine", "ejs");
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -69,8 +90,7 @@ app.post("/submit", (req, res) => {
     totalScore: totalCorrect,
     totalWrong: totalWrong 
   });
-  console.log(isCorrect);
-  console.log(totalCorrect);
+  
 });
 
 app.get("/restart", (req, res) => {
@@ -95,6 +115,3 @@ function nextQuestion() {
 }
 
 
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-})
