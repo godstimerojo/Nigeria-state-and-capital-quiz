@@ -139,24 +139,31 @@ app.post("/submit", (req, res) => {
 app.get("/restart", (req, res) => {
   req.session.totalCorrect = 0;
   req.session.totalWrong = 0;
-  req.session.previousQuestionId = null;
+  req.session.askedQuestionIds = [];
 
   res.redirect("/");
 });
 
 function nextQuestion(sessionData) {
+  if (!sessionData.askedQuestionIds) {
+    sessionData.askedQuestionIds = [];
+  }
+
   let availableQuestions = quiz.filter(
-    (state) => state.id !== sessionData.previousQuestionId
+    (state) => !sessionData.askedQuestionIds.includes(state.id)
   );
 
   if (availableQuestions.length === 0) {
+    sessionData.askedQuestionIds = [];
     availableQuestions = quiz;
   }
 
   const randomState =
-    availableQuestions[Math.floor(Math.random() * availableQuestions.length)];
+    availableQuestions[
+      Math.floor(Math.random() * availableQuestions.length)
+    ];
 
-  sessionData.previousQuestionId = randomState.id;
+  sessionData.askedQuestionIds.push(randomState.id);
 
   return randomState;
 }
